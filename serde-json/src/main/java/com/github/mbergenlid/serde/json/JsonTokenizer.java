@@ -4,12 +4,13 @@ import java.io.IOException;
 import java.io.Reader;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 public class JsonTokenizer implements Iterator<JsonTokenizer.Token> {
 
    public static final Token START_ARRAY = new Token(TokenType.START_ARRAY);
    public static final Token END_ARRAY = new Token(TokenType.END_ARRAY);
-   public static final Token START_OBJECT = new Token(TokenType.START_ARRAY);
+   public static final Token START_OBJECT = new Token(TokenType.START_OBJECT);
    public static final Token END_OBJECT = new Token(TokenType.END_OBJECT);
    public static final Token COMMA = new Token(TokenType.COMMA);
    public static final Token COLON = new Token(TokenType.COLON);
@@ -150,7 +151,7 @@ public class JsonTokenizer implements Iterator<JsonTokenizer.Token> {
 
    private Token readInteger() throws IOException {
       int original = reader.read();
-      int value = original == '-' ? 0 : (original - '0');
+      long value = original == '-' ? 0 : (original - '0');
       int v = reader.read();
       while(v >= '0' && v <= '9') {
          value = value*10 + (v - '0');
@@ -192,7 +193,7 @@ public class JsonTokenizer implements Iterator<JsonTokenizer.Token> {
          return new NumberToken(value, 0);
       }
 
-      public static Token number(int unscaled, int scale) {
+      public static Token number(long unscaled, int scale) {
          return new NumberToken(unscaled, scale);
       }
 
@@ -218,6 +219,10 @@ public class JsonTokenizer implements Iterator<JsonTokenizer.Token> {
          return ((StringToken)this).value;
       }
 
+      public Optional<NumberToken> asNumber() {
+         return type() == TokenType.INTEGER ? Optional.of((NumberToken)this) : Optional.empty();
+      }
+
       private static class StringToken extends Token {
 
          private final String value;
@@ -240,12 +245,12 @@ public class JsonTokenizer implements Iterator<JsonTokenizer.Token> {
       }
    }
 
-   private static class NumberToken extends Token {
+   protected static class NumberToken extends Token {
 
-      private final int value;
+      private final long value;
       private final int scale;
 
-      private NumberToken(int value, int scale) {
+      private NumberToken(long value, int scale) {
          super(TokenType.INTEGER);
          this.value = value;
          this.scale = scale;
@@ -255,6 +260,18 @@ public class JsonTokenizer implements Iterator<JsonTokenizer.Token> {
       public boolean equals(Object obj) {
          return obj.getClass().equals(NumberToken.class) &&
             this.value == ((NumberToken)obj).value && this.scale == ((NumberToken)obj).scale;
+      }
+
+      public int intValue() {
+         if(isInt()) {
+            return (int) this.value;
+         } else {
+            throw new JsonDeserializer.JsonException();
+         }
+      }
+
+      public boolean isInt() {
+         return scale == 0 && this.value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE;
       }
    }
 
@@ -298,10 +315,6 @@ public class JsonTokenizer implements Iterator<JsonTokenizer.Token> {
          } else {
             return head = this.reader.read();
          }
-      }
-
-      public int read(char[] buf) throws IOException {
-         return reader.read(buf);
       }
 
       public void undo() {
